@@ -12,6 +12,7 @@
 #import "RNFetchBlobConst.h"
 #import "IOS7Polyfill.h"
 @import AssetsLibrary;
+#import <Photos/Photos.h>
 
 #if __has_include(<React/RCTAssert.h>)
 #import <React/RCTBridge.h>
@@ -432,22 +433,21 @@ NSMutableDictionary *fileStreams = nil;
          encoding:(NSString *)encoding
        onComplete:(void (^)(id content, NSString * errMsg))onComplete
 {
-    [[self class] getPathFromUri:path completionHandler:^(NSString *path, ALAssetRepresentation *asset) {
+    [[self class] getPhotoPathFromUri:path completionHandler:^(NSString *path, PHAsset *asset) {
         __block NSData * fileContent;
-        NSError * err;
-        __block Byte * buffer;
         if(asset != nil)
         {
-            buffer = malloc(asset.size);
-            [asset getBytes:buffer fromOffset:0 length:asset.size error:&err];
-            if(err != nil)
-            {
-                onComplete(nil, [err description]);
-                free(buffer);
-                return;
-            }
-            fileContent = [NSData dataWithBytes:buffer length:asset.size];
-            free(buffer);
+          [[PHImageManager defaultManager]
+           requestImageDataForAsset:asset
+           options:nil
+           resultHandler:^(NSData *imageData,
+                           NSString *dataUTI,
+                           UIImageOrientation orientation,
+                           NSDictionary *info)
+           {
+             fileContent = [NSData dataWithData:imageData];
+             [[self class] readFileContent:fileContent encoding:encoding onComplete:onComplete];
+           }];
         }
         else
         {
@@ -456,39 +456,40 @@ NSMutableDictionary *fileStreams = nil;
                 return;
             }
             fileContent = [NSData dataWithContentsOfFile:path];
-            
-        }
-        
-        if(encoding != nil)
-        {
-            if([[encoding lowercaseString] isEqualToString:@"utf8"])
-            {
-                NSString * utf8 = [[NSString alloc] initWithData:fileContent encoding:NSUTF8StringEncoding];
-                if(utf8 == nil)
-                    onComplete([[NSString alloc] initWithData:fileContent encoding:NSISOLatin1StringEncoding], nil);
-                else
-                    onComplete(utf8, nil);
-            }
-            else if ([[encoding lowercaseString] isEqualToString:@"base64"]) {
-                onComplete([fileContent base64EncodedStringWithOptions:0], nil);
-            }
-            else if ([[encoding lowercaseString] isEqualToString:@"ascii"]) {
-                NSMutableArray * resultArray = [NSMutableArray array];
-                char * bytes = [fileContent bytes];
-                for(int i=0;i<[fileContent length];i++) {
-                    [resultArray addObject:[NSNumber numberWithChar:bytes[i]]];
-                }
-                onComplete(resultArray, nil);
-            }
-        }
-        else
-        {
-            onComplete(fileContent, nil);
+          [[self class] readFileContent:fileContent encoding:encoding onComplete:onComplete];
         }
         
     }];
 }
 
++ (void)readFileContent:(NSData *)fileContent encoding:(NSString *)encoding onComplete:(void (^)(id content, NSString * errMsg))onComplete {
+  if(encoding != nil)
+  {
+    if([[encoding lowercaseString] isEqualToString:@"utf8"])
+    {
+      NSString * utf8 = [[NSString alloc] initWithData:fileContent encoding:NSUTF8StringEncoding];
+      if(utf8 == nil)
+        onComplete([[NSString alloc] initWithData:fileContent encoding:NSISOLatin1StringEncoding], nil);
+      else
+        onComplete(utf8, nil);
+    }
+    else if ([[encoding lowercaseString] isEqualToString:@"base64"]) {
+      onComplete([fileContent base64EncodedStringWithOptions:0], nil);
+    }
+    else if ([[encoding lowercaseString] isEqualToString:@"ascii"]) {
+      NSMutableArray * resultArray = [NSMutableArray array];
+      char * bytes = [fileContent bytes];
+      for(int i=0;i<[fileContent length];i++) {
+        [resultArray addObject:[NSNumber numberWithChar:bytes[i]]];
+      }
+      onComplete(resultArray, nil);
+    }
+  }
+  else
+  {
+    onComplete(fileContent, nil);
+  }
+}
 
 # pragma mark - mkdir
 
@@ -732,6 +733,26 @@ NSMutableDictionary *fileStreams = nil;
 
 
 # pragma mark - get absolute path of resource
+
+// Use new Photos Framework to solve the bug where unuploaded iCloud photo return nil via ALAssetsLibrary.
++ (void) getPhotoPathFromUri:(NSString *)uri completionHandler:(void(^)(NSString * path, PHAsset *asset)) onComplete
+{
+  if([uri hasPrefix:AL_PREFIX])
+  {
+    NSURL *asseturl = [NSURL URLWithString:uri];
+    PHFetchResult *results = [PHAsset fetchAssetsWithALAssetURLs:@[asseturl] options:nil];
+    if (results.count == 0) {
+      onComplete(nil, nil);
+    } else {
+      PHAsset *asset = [results firstObject];
+      onComplete(nil, asset);
+    }
+  }
+  else
+  {
+    onComplete([[self class] getPathOfAsset:uri], nil);
+  }
+}
 
 + (void) getPathFromUri:(NSString *)uri completionHandler:(void(^)(NSString * path, ALAssetRepresentation *asset)) onComplete
 {
