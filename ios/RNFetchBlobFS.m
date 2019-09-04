@@ -445,8 +445,14 @@ NSMutableDictionary *fileStreams = nil;
                 resultHandler:^(AVAsset * _Nullable asset,
                                 AVAudioMix * _Nullable audioMix,
                                 NSDictionary * _Nullable info) {
+
+                    if (![asset isKindOfClass:[AVURLAsset class]]) {
+                        onComplete(nil, @"Invalid AVURLAsset class from react-native-fetch-blob");
+                        return;
+                    };
+
                     AVURLAsset* myAsset = (AVURLAsset*)asset;
-                    fileContent = [NSData dataWithContentsOfFile:myAsset.URL.relativePath];
+                    fileContent = [NSData dataWithContentsOfFile:myAsset.URL];
                     [[self class] readFileContent:fileContent encoding:encoding onComplete:onComplete];
                 }];
             } else {
