@@ -255,11 +255,11 @@ NSMutableDictionary *fileStreams = nil;
                     [asciiArray addObject:[NSNumber numberWithChar:bytePtr[i]]];
                 }
             }
-            
+
             NSDictionary * payload = @{ @"event": FS_EVENT_DATA,  @"detail" : asciiArray };
             [event sendDeviceEventWithName:streamId body:payload];
         }
-        
+
     }
     @catch (NSException * ex)
     {
@@ -437,17 +437,37 @@ NSMutableDictionary *fileStreams = nil;
         __block NSData * fileContent;
         if(asset != nil)
         {
-          [[PHImageManager defaultManager]
-           requestImageDataForAsset:asset
-           options:nil
-           resultHandler:^(NSData *imageData,
-                           NSString *dataUTI,
-                           UIImageOrientation orientation,
-                           NSDictionary *info)
-           {
-             fileContent = [NSData dataWithData:imageData];
-             [[self class] readFileContent:fileContent encoding:encoding onComplete:onComplete];
-           }];
+            if(asset.mediaType == PHAssetMediaTypeVideo) {
+
+                [[PHImageManager defaultManager]
+                requestAVAssetForVideo:asset
+                options:nil
+                resultHandler:^(AVAsset * _Nullable asset,
+                                AVAudioMix * _Nullable audioMix,
+                                NSDictionary * _Nullable info) {
+
+                    if (![asset isKindOfClass:[AVURLAsset class]]) {
+                        onComplete(nil, @"Invalid AVURLAsset class from react-native-fetch-blob");
+                        return;
+                    };
+
+                    AVURLAsset* myAsset = (AVURLAsset*)asset;
+                    fileContent = [NSData dataWithContentsOfFile:myAsset.URL];
+                    [[self class] readFileContent:fileContent encoding:encoding onComplete:onComplete];
+                }];
+            } else {
+                [[PHImageManager defaultManager]
+                requestImageDataForAsset:asset
+                options:nil
+                resultHandler:^(NSData *imageData,
+                                NSString *dataUTI,
+                                UIImageOrientation orientation,
+                                NSDictionary *info)
+                {
+                    fileContent = [NSData dataWithData:imageData];
+                    [[self class] readFileContent:fileContent encoding:encoding onComplete:onComplete];
+                }];
+            }
         }
         else
         {
@@ -458,7 +478,7 @@ NSMutableDictionary *fileStreams = nil;
             fileContent = [NSData dataWithContentsOfFile:path];
           [[self class] readFileContent:fileContent encoding:encoding onComplete:onComplete];
         }
-        
+
     }];
 }
 
@@ -572,7 +592,7 @@ NSMutableDictionary *fileStreams = nil;
     NSData * decodedData = nil;
     if([[self.encoding lowercaseString] isEqualToString:@"base64"]) {
         decodedData = [[NSData alloc] initWithBase64EncodedString:chunk options: NSDataBase64DecodingIgnoreUnknownCharacters];
-    } 
+    }
     else if([[self.encoding lowercaseString] isEqualToString:@"utf8"]) {
         decodedData = [chunk dataUsingEncoding:NSUTF8StringEncoding];
     }
@@ -786,7 +806,7 @@ NSMutableDictionary *fileStreams = nil;
     if (dictionary) {
         NSNumber *fileSystemSizeInBytes = [dictionary objectForKey: NSFileSystemSize];
         NSNumber *freeFileSystemSizeInBytes = [dictionary objectForKey:NSFileSystemFreeSize];
-        
+
         callback(@[[NSNull null], @{
                   @"free" : freeFileSystemSizeInBytes,
                   @"total" : fileSystemSizeInBytes,
