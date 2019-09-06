@@ -452,7 +452,7 @@ NSMutableDictionary *fileStreams = nil;
                     };
 
                     AVURLAsset* myAsset = (AVURLAsset*)asset;
-                    fileContent = [NSData dataWithContentsOfFile:myAsset.URL];
+                    fileContent = [NSData dataWithContentsOfURL:myAsset.URL];
                     [[self class] readFileContent:fileContent encoding:encoding onComplete:onComplete];
                 }];
             } else {
